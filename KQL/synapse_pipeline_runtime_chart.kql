@@ -1,0 +1,11 @@
+let minD = toscalar(SynapseIntegrationPipelineRuns
+|summarize minD = min(Start));
+let maxD = toscalar(SynapseIntegrationPipelineRuns
+|summarize maxD = max(Start));
+SynapseIntegrationPipelineRuns 
+| where Start >= ago(14d)
+| extend runDuration = max_of(End - Start, timespan(0)), runDurationMinutes = tolong(max_of(End - Start, timespan(0)))/10000000/60.0
+| project Start, PipelineName, runDuration, runDurationMinutes
+| make-series ts = avg(runDurationMinutes) default = 0 on Start from minD to maxD step 1d by PipelineName
+| render timechart
+

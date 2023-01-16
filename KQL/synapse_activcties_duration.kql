@@ -1,0 +1,5 @@
+SynapseIntegrationActivityRuns
+| where ActivityType == 'SqlServerStoredProcedure' and Status !in ('InProgress', 'Queued') // in ('Succeeded', 'Cancelled')
+| project ActivityName, Status, Start, End
+| summarize percentile(End-Start, 95), percentile(End-Start, 99), AvgDuration = avg(End-Start), MinDuration = min(End-Start), MaxDuration = max(End-Start), TotalRuns = count() by ActivityName, Status
+| order by AvgDuration, ActivityName
