@@ -5,19 +5,29 @@ Can also be used as a strating point to create a persisted date dimension.
 */
 CREATE VIEW vDimDate AS
 WITH cteYear AS (
-    SELECT 1970 as 'year'
+     SELECT value AS 'year' FROM GENERATE_SERIES(1970, 2100) /* requires database compatibility level 160 */
+    /* for Compatibility level below 160 use recursive cte
+    SELECT 1970 AS 'year'
     UNION ALL
     SELECT year + 1 FROM cteYear WHERE year < 2070 -- serverless pool has max recursion depth of 100
+    */
+
 ),
 cteMonth as (
+SELECT value AS 'month' FROM GENERATE_SERIES(1, 12) /* requires database compatibility level 160 */
+    /* for Compatibility level below 160 use recursive cte
     SELECT 1 AS 'month'
     UNION ALL 
     SELECT month + 1 FROM cteMonth WHERE month < 12
+    */
 ),
 cteDays AS (
+    SELECT value AS 'day' FROM GENERATE_SERIES(1, 31) /* requires database compatibility level 160 */
+    /* for Compatibility level below 160 use recursive cte
     SELECT 1 AS 'day'
     UNION ALL 
     SELECT day +1 FROM cteDays WHERE day < 31
+    */
 )
 
 SELECT 
