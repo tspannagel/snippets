@@ -58,7 +58,7 @@ dimArticle as (
 /* 
     analyse in sql 
 */
-SELECT sum(f.amount) as 'Revenue', d.article_category FROM 
-factSales f INNER JOIN dimArticle d on f.article_id = d.article_id
-GROUP BY d.article_category
-ORDER BY article_category
+-- SELECT sum(f.amount) as 'Revenue', d.article_category FROM 
+-- factSales f INNER JOIN dimArticle d on f.article_id = d.article_id
+-- GROUP BY d.article_category
+-- ORDER BY article_category

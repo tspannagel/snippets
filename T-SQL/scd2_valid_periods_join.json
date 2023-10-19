@@ -1,0 +1,131 @@
+{
+    "metadata": {
+        "kernelspec": {
+            "name": "SQL",
+            "display_name": "SQL",
+            "language": "sql"
+        },
+        "language_info": {
+            "name": "sql",
+            "version": ""
+        }
+    },
+    "nbformat_minor": 2,
+    "nbformat": 4,
+    "cells": [
+        {
+            "cell_type": "markdown",
+            "source": [
+                "# SCD2 Joins\r\n",
+                "Below is an example how scd2 tables can be joined and return the corresponding timeslices\r\n",
+                "\r\n",
+                "## Consultant\r\n",
+                "This CTE emulates a table containing 3 consultants and their assignment to projects. Typically this assignment would have been modelled in a bridge table, for simplicity it is denormalized.\r\n",
+                "\r\n",
+                "## Project\r\n",
+                "This CTE emulates a table containing 2 projects and project phases. Again, the phases are contained in the same table for simplicity reasons. \r\n",
+                "\r\n",
+                "## Approach\r\n",
+                "1. Create a list of all available dates from the tables to be joined (CTE called *all_dates*). in the example we create a CTE for this by unioning two queries per table (id and the valid_from or valid_to dates)\r\n",
+                "1. Derive the new validity periods based on the list from step 1 (CTE called *effective_periods*). Ordering by Date and Partitioning by id allows to use LEAD() to detect the corresponding valid_to date (i.e. the next date in the list)\r\n",
+                "1. Select from the *effective_periods*-CTE and join consultants and projects based on their project_id and respective valid_from/valid_to dates to the periods\r\n",
+                "1. The result can be grouped by consultant and project to combine continuous periods (compare the output of the below sql cells). Having all the validity periods may lead to excessive rows which can be solved by the grouping\r\n",
+                ""
+            ],
+            "metadata": {
+                "language": "sql",
+                "azdata_cell_guid": "f74ae950-f370-48e3-8b39-3c29328ebfed"
+            },
+            "attachments": {}
+        },
+        {
+            "cell_type": "code",
+            "source": [
+                "WITH consultant AS (\r\n",
+                "  SELECT 4711 AS consultant_id, 'John Doe' AS consultant_name, 123 AS project_id, CAST('2023-01-01' AS DATE ) AS valid_from, CAST('2100-12-31' AS DATE ) AS valid_to\r\n",
+                "  UNION  \r\n",
+                "  SELECT 4712, 'Jane Doe', 123, CAST('2023-01-07' AS DATE ), CAST('2100-12-31' AS DATE )  \r\n",
+                "  UNION  \r\n",
+                "  SELECT 4712, 'Jane Doe', 234, CAST('2023-02-01' AS DATE ), CAST('2023-05-31' AS DATE )\r\n",
+                "  UNION  \r\n",
+                "  SELECT 4712, 'Jane Doe', 123, CAST('2023-04-01' AS DATE ), CAST('2100-12-31' AS DATE )\r\n",
+                "  UNION  \r\n",
+                "  SELECT 4713, 'Max Mustermann', 123, CAST('2023-02-01' AS DATE ), CAST('2023-04-30' AS DATE )\r\n",
+                "),\r\n",
+                "project AS (\r\n",
+                "  SELECT 123 AS project_id, 'Manhattan' AS project_name, 'Queued' as project_phase, CAST('2022-12-01' AS DATE ) AS valid_from, CAST('2023-01-02' AS DATE ) AS valid_to\r\n",
+                "  UNION \r\n",
+                "  SELECT 123, 'Manhattan', 'In progress', CAST('2023-01-01' AS DATE ), CAST('2100-12-31' AS DATE )\r\n",
+                "  UNION \r\n",
+                "  SELECT 234, 'Apollo', 'Queued', CAST('2022-10-01' AS DATE ), CAST('2023-02-02' AS DATE )\r\n",
+                "  UNION \r\n",
+                "  SELECT 234, 'Apollo', 'In progress', CAST('2023-02-02' AS DATE ), CAST('2023-05-20' AS DATE )\r\n",
+                "  UNION \r\n",
+                "  SELECT 234, 'Apollo', 'Completed', CAST('2023-05-20' AS DATE ), CAST('2100-12-31' AS DATE )\r\n",
+                " ),\r\n",
+                " all_dates AS ( /* get a list of all dates from related tables to build time slices */\r\n",
+                "  SELECT project_id, valid_from AS valid_date FROM consultant\r\n",
+                "  UNION \r\n",
+                "  SELECT project_id, valid_to FROM consultant\r\n",
+                "  UNION  \r\n",
+                "  SELECT project_id, valid_from FROM project\r\n",
+                "  UNION \r\n",
+                "  SELECT project_id, valid_to FROM project\r\n",
+                ")\r\n",
+                ", /* derive new valid_to column based on the ordering */\r\n",
+                "effective_periods AS (\r\n",
+                "  SELECT project_id\r\n",
+                "    , CAST(valid_date AS DATE) AS valid_from\r\n",
+                "    , CAST(LEAD(valid_date, 1, CAST('2100-12-31' AS DATE )) OVER (PARTITION BY project_id ORDER BY project_id, valid_date) AS DATE) AS valid_to\r\n",
+                "  FROM all_dates\r\n",
+                "  ORDER BY \r\n",
+                ")\r\n",
+                "\r\n",
+                "/*\r\n",
+                "  return grouped timeslices and assignments\r\n",
+                "*/\r\n",
+                "SELECT\r\n",
+                "  c.consultant_name,\r\n",
+                "  p.project_name,\r\n",
+                "  p.project_phase,\r\n",
+                "  min(ep.valid_from) as valid_from,\r\n",
+                " max(ep.valid_to) as valid_to\r\n",
+                "FROM  effective_periods ep /* start with possible periods */\r\n",
+                "  LEFT JOIN consultant c ON c.project_id = ep.project_id /* consultants have to be assigned to a project ion the respective periods*/\r\n",
+                "  AND c.valid_to >= ep.valid_from  /* assure that the consultants validity periods is within the slice */\r\n",
+                "  AND c.valid_from < ep.valid_to\r\n",
+                "  LEFT JOIN project p ON ep.project_id = p.project_id /* join projects to corresponding periods */\r\n",
+                "  AND p.valid_to >= ep.valid_from /* assure that the projects validity periods is within the slice */\r\n",
+                "  AND p.valid_from < ep.valid_to\r\n",
+                "WHERE\r\n",
+                "  ep.valid_from < CAST('2100-12-31' AS DATE) /* exclude end of the line valid_froms, could be moved to effective_periods */\r\n",
+                "GROUP BY /* combine unchanged periods */\r\n",
+                "  c.consultant_name,\r\n",
+                "  p.project_name,\r\n",
+                "  p.project_phase\r\n",
+                "ORDER BY\r\n",
+                "  2,  4 desc"
+            ],
+            "metadata": {
+                "azdata_cell_guid": "817d7b12-839c-407a-810e-1e99808f1463",
+                "language": "sql"
+            },
+            "outputs": [
+                {
+                    "output_type": "error",
+                    "ename": "",
+                    "evalue": "Msg 102, Level 15, State 1, Line 39\r\nIncorrect syntax near ')'.",
+                    "traceback": []
+                },
+                {
+                    "output_type": "display_data",
+                    "data": {
+                        "text/html": "Total execution time: 00:00:00.024"
+                    },
+                    "metadata": {}
+                }
+            ],
+            "execution_count": 4
+        }
+    ]
+}
