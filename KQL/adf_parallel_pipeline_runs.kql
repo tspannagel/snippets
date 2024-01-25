@@ -1,0 +1,5 @@
+ADFPipelineRun 
+| extend time_range = range(Start, End, 1s)
+| mv-expand time_range to typeof(datetime)
+| summarize parallelRuns = count() by time_range
+| summarize max(parallelRuns) by bin(time_range,5m)

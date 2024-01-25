@@ -1,0 +1,6 @@
+AzureMetrics
+| where TimeGenerated  >= ago(7d)
+| where ResourceProvider == "MICROSOFT.STORAGE"
+| where MetricName  == "UsedCapacity"
+| summarize UsedCapacityGiB =  avg(Maximum)/1024.0/1024.0/1024.0 by Resource, LastChangeCaptured = bin(TimeGenerated, 1d)
+| summarize arg_max(LastChangeCaptured, *) by Resource
