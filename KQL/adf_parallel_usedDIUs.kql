@@ -1,0 +1,8 @@
+ADFActivityRun 
+| where ActivityType == "Copy" and TimeGenerated > ago(24h)
+| parse Output with * "usedDataIntegrationUnits\":" UsedDIUs:int ","*
+| project  TimeGenerated, ActivityRunId, PipelineRunId, Start, End, UsedDIUs
+| extend TimeRange = range(Start, End, 1s)
+| mv-expand TimeRange to typeof(datetime)
+| summarize TotalUsedDIUs = sum(UsedDIUs), TotalActivities = count_distinct(ActivityRunId) by TimeRange
+| summarize min(TotalUsedDIUs), max(TotalUsedDIUs), min(TotalActivities),max(TotalActivities) by bin(TimeRange, 1h)

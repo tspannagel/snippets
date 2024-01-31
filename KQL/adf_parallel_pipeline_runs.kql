@@ -1,4 +1,5 @@
 ADFPipelineRun 
+| where TimeGenerated > ago(24h)
 | extend time_range = range(Start, End, 1s)
 | mv-expand time_range to typeof(datetime)
 | summarize parallelRuns = count() by time_range
